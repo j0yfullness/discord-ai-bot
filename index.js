@@ -391,7 +391,7 @@ Jawab secara natural.`,
                         "application/json",
 
                     "X-API-Key":
-                        YOU_API_KEY
+                        process.env.YOU_API_KE
                 }
             }
         );
