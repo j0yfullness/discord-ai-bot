@@ -391,7 +391,7 @@ Jawab secara natural.`,
                         "application/json",
 
                     "X-API-Key":
-                        process.env.YOU_API_KE
+                        process.env.YOU_API_KEY
                 }
             }
         );
@@ -682,7 +682,7 @@ const commands = [
 
 const rest = new REST({
     version: "10"
-}).setToken(DISCORD_TOKEN);
+}).setToken(process.env.DISCORD_TOKEN);
 
 (async () => {
 
