@@ -1,13 +1,16 @@
 // ======================================================
 // CHATGPT-STYLE DISCORD AI ASSISTANT
 // ULTIMATE AI WORKSPACE VERSION
+// MEMORY ISOLATED VERSION
 // ======================================================
 //
 // FEATURES
 // ✅ ChatGPT-style AI
 // ✅ Bahasa Indonesia default
+// ✅ Memory per-user + per-channel
+// ✅ Tidak tercampur antar user
 // ✅ Smooth streaming response
-// ✅ Research mode in chat
+// ✅ Research mode
 // ✅ AI status indicator
 // ✅ Typing presence
 // ✅ Processing animation
@@ -38,12 +41,6 @@
 // CLIENT_ID=APPLICATION_ID
 // GUILD_ID=SERVER_ID
 // YOU_API_KEY=YOU_API_KEY
-//
-// ======================================================
-// RUN
-// ======================================================
-//
-// node index.js
 //
 // ======================================================
 
@@ -82,9 +79,6 @@ const CLIENT_ID =
 const GUILD_ID =
     process.env.GUILD_ID;
 
-const YOU_API_KEY =
-    process.env.YOU_API_KEY;
-
 // ======================================================
 // CONFIG
 // ======================================================
@@ -114,52 +108,109 @@ const client = new Client({
 const db = new Database("memory.db");
 
 db.prepare(`
+
 CREATE TABLE IF NOT EXISTS memory (
+
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+
     userId TEXT,
+
+    channelId TEXT,
+
     role TEXT,
+
     content TEXT
 )
+
 `).run();
 
 // ======================================================
-// MEMORY FUNCTIONS
+// MEMORY
 // ======================================================
 
 function saveMemory(
+
     userId,
+
+    channelId,
+
     role,
+
     content
+
 ) {
 
     db.prepare(`
+
         INSERT INTO memory
-        (userId, role, content)
-        VALUES (?, ?, ?)
+
+        (userId, channelId, role, content)
+
+        VALUES (?, ?, ?, ?)
+
     `).run(
+
         userId,
+
+        channelId,
+
         role,
+
         content
     );
 }
 
-function getMemory(userId) {
+function getMemory(
+
+    userId,
+
+    channelId
+
+) {
 
     return db.prepare(`
+
         SELECT *
+
         FROM memory
+
         WHERE userId = ?
+        AND channelId = ?
+
         ORDER BY id DESC
-        LIMIT 10
-    `).all(userId).reverse();
+
+        LIMIT 15
+
+    `).all(
+
+        userId,
+
+        channelId
+
+    ).reverse();
 }
 
-function clearMemory(userId) {
+function clearMemory(
+
+    userId,
+
+    channelId
+
+) {
 
     db.prepare(`
+
         DELETE FROM memory
+
         WHERE userId = ?
-    `).run(userId);
+        AND channelId = ?
+
+    `).run(
+
+        userId,
+
+        channelId
+    );
 }
 
 // ======================================================
@@ -334,15 +385,24 @@ async function startProcessingAnimation(
 // ======================================================
 
 async function askAI(
+
     userId,
+
+    channelId,
+
     message,
+
     showSources = false
+
 ) {
 
     try {
 
         const history =
-            getMemory(userId);
+            getMemory(
+                userId,
+                channelId
+            );
 
         const context =
             history
@@ -358,19 +418,18 @@ async function askAI(
 
             {
                 input:
+
 `Kamu adalah AI assistant Discord yang sangat pintar seperti ChatGPT.
 
 Selalu gunakan Bahasa Indonesia yang natural, modern, santai, jelas, dan mudah dimengerti.
 
 Jika user menggunakan bahasa lain, balas menggunakan bahasa yang sama.
 
-Gunakan gaya bicara AI modern yang:
-- ramah
-- pintar
-- membantu
-- natural
-- tidak terlalu formal
-- enak dibaca
+PENTING:
+- Fokus hanya pada user saat ini
+- Jangan mencampur percakapan user lain
+- Jangan membawa topik dari orang lain
+- Anggap setiap channel adalah workspace pribadi
 
 Conversation History:
 ${context}
@@ -390,7 +449,7 @@ Jawab secara natural.`,
                     "Content-Type":
                         "application/json",
 
-                    "X-API-Key":
+                    "X-API-KEY":
                         process.env.YOU_API_KEY
                 }
             }
@@ -406,14 +465,24 @@ Jawab secara natural.`,
             output.sources || [];
 
         saveMemory(
+
             userId,
+
+            channelId,
+
             "user",
+
             message
         );
 
         saveMemory(
+
             userId,
+
+            channelId,
+
             "assistant",
+
             content
         );
 
@@ -438,6 +507,7 @@ Jawab secara natural.`,
             .forEach((src, i) => {
 
                 sourceText +=
+
 `\n[${i + 1}] ${src.title}
 ${src.url}`;
             });
@@ -481,8 +551,8 @@ async function streamMessage(
     text
 ) {
 
-    const chunkSize = 25;
-    const delay = 30;
+    const chunkSize = 45;
+    const delay = 50;
 
     let current = "";
 
@@ -567,8 +637,6 @@ async function analyzeFile(
             response.data
         );
 
-        // PDF
-
         if (
             fileName.endsWith(".pdf")
         ) {
@@ -584,8 +652,6 @@ async function analyzeFile(
                 .substring(0, 5000);
         }
 
-        // DOCX
-
         if (
             fileName.endsWith(".docx")
         ) {
@@ -599,8 +665,6 @@ async function analyzeFile(
             return result.value
                 .substring(0, 5000);
         }
-
-        // TXT
 
         if (
             fileName.endsWith(".txt")
@@ -682,7 +746,7 @@ const commands = [
 
 const rest = new REST({
     version: "10"
-}).setToken(process.env.DISCORD_TOKEN);
+}).setToken(DISCORD_TOKEN);
 
 (async () => {
 
@@ -853,6 +917,8 @@ client.on(
 
                 message.author.id,
 
+                message.channel.id,
+
                 researchMode
                     ? `Research mendalam tentang: ${userMessage}`
                     : userMessage,
@@ -915,9 +981,7 @@ client.on(
         !interaction.isChatInputCommand()
     ) return;
 
-    // ==========================================
     // /PRIVATEAI
-    // ==========================================
 
     if (
         interaction.commandName ===
@@ -1012,9 +1076,7 @@ client.on(
         });
     }
 
-    // ==========================================
     // /RESET
-    // ==========================================
 
     if (
         interaction.commandName ===
@@ -1022,7 +1084,10 @@ client.on(
     ) {
 
         clearMemory(
-            interaction.user.id
+
+            interaction.user.id,
+
+            interaction.channel.id
         );
 
         return interaction.reply({
@@ -1034,9 +1099,7 @@ client.on(
         });
     }
 
-    // ==========================================
     // /IMAGE
-    // ==========================================
 
     if (
         interaction.commandName ===
@@ -1067,9 +1130,7 @@ client.on(
         });
     }
 
-    // ==========================================
     // /AI
-    // ==========================================
 
     if (
         interaction.commandName ===
@@ -1085,12 +1146,18 @@ client.on(
 
         const result =
             await askAI(
+
                 interaction.user.id,
+
+                interaction.channel.id,
+
                 msg,
+
                 false
             );
 
         return interaction.editReply({
+
             content:
                 result.content.substring(
                     0,
@@ -1099,9 +1166,7 @@ client.on(
         });
     }
 
-    // ==========================================
     // /RESEARCH
-    // ==========================================
 
     if (
         interaction.commandName ===
@@ -1120,12 +1185,15 @@ client.on(
 
                 interaction.user.id,
 
+                interaction.channel.id,
+
                 `Research mendalam tentang: ${topic}`,
 
                 true
             );
 
         return interaction.editReply({
+
             content:
                 result.content.substring(
                     0,
@@ -1134,9 +1202,7 @@ client.on(
         });
     }
 
-    // ==========================================
     // /ANALYZE
-    // ==========================================
 
     if (
         interaction.commandName ===
@@ -1190,6 +1256,8 @@ client.on(
                 await askAI(
 
                     interaction.user.id,
+
+                    interaction.channel.id,
 
                     `Analisa file berikut:\n\n${extracted}`,
 
